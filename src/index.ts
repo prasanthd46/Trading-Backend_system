@@ -3,6 +3,7 @@ import express from "express"
 const app = express()
 
 
+app.use(express.json())
 
 interface Balances {
     [key:string] : number
@@ -38,11 +39,13 @@ const users : User[] = [{
 
 
 
-const bids:Order[] = []
-const asks:Order[] = []
+export const bids:Order[] = []
+export const asks:Order[] = []
 
-app.get("/order",(req,res)=>{
+app.post("/order",(req,res)=>{
+
     const {side,price,quantity,userId} = req.body
+    
 
     const remainingQty:number = fillOrders(side,price,quantity,userId)
 
@@ -66,6 +69,7 @@ app.get("/order",(req,res)=>{
         })
         asks.sort((a,b)=> a.price - b.price)
     }
+    console.log(bids,asks)
     return res.json({filledQuantity:quantity - remainingQty})
 
 })
@@ -101,6 +105,40 @@ app.get("/depth",(req,res)=>{
     return res.json({depth})
 
 })
+app.get("/balance/:userId",(req,res)=>{
+    const userId = req.params.userId
+    const user = users.find(x => x.id === userId)
+
+    if(!user){
+        return res.json({
+            usd:0,
+            [TICKER]:0
+        })
+    }
+
+    return res.json({balance : user.balances})
+})
+
+app.get("/quote",(req,res)=>{
+    const qty = req.body.qty
+    let quantity = qty
+    let priceSum : number = 0 
+    for(let i=0;i<asks.length;i++){
+        if(quantity > 0){
+            if(quantity < asks[i].quantity){
+                priceSum += quantity * asks[i].price 
+                quantity = 0
+            }else{
+                priceSum += asks[i].quantity * asks[i].price
+                quantity -= asks[i].quantity
+            }
+        }else{
+            break;
+        }
+    }
+    const quote = priceSum
+    return res.json({quote,bids,asks})
+})
 
 function flipBalance(userId1:string,userId2:string,quantity:number,price:number){
     let user1 = users.find(x => x.id === userId1)
@@ -118,7 +156,7 @@ function flipBalance(userId1:string,userId2:string,quantity:number,price:number)
 function fillOrders(side:string,price:number,qty:number,userId:string) : number {
     let  quantity = qty
     if(side == "bid"){
-        for(let i=asks.length-1;i>=0;i--){
+        for(let i=0;i<asks.length;i++){
             if(price<asks[i].price){
                 continue
             }
@@ -130,10 +168,11 @@ function fillOrders(side:string,price:number,qty:number,userId:string) : number 
                 quantity -= asks[i].quantity
                 flipBalance(asks[i].userId,userId,asks[i].quantity,asks[i].price)
                 asks.splice(i,1)
+                i--;
             }
         }
     }else{
-        for(let i=bids.length-1;i>=0;i--){
+        for(let i=0;i<bids.length;i++){
             if(price > bids[i].price){
                 continue;
             }
@@ -145,6 +184,7 @@ function fillOrders(side:string,price:number,qty:number,userId:string) : number 
                 quantity -= bids[i].quantity
                 flipBalance(userId,bids[i].userId,bids[i].quantity,price)
                 bids.splice(i,1)
+                i--
             }
         }
     }
@@ -153,3 +193,5 @@ function fillOrders(side:string,price:number,qty:number,userId:string) : number 
 app.listen(3000,()=>{
     console.log("Listening at port : 3000")
 })
+
+export default app
