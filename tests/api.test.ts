@@ -1,5 +1,5 @@
 import {describe,expect,it} from "@jest/globals"
-import app, { asks, bids, TICKER } from "../index"
+import app, { asks, bids, TICKER } from "../src/index"
 import request from "supertest"
 
 describe("Testing the APIs",()=>{
