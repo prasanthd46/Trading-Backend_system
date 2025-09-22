@@ -56,7 +56,7 @@ app.get("/order",(req,res)=>{
             price,
             quantity
         })
-        bids.sort((a,b) => a.price - b.price);
+        bids.sort((a,b) => b.price - a.price);
     }
     if(side == "ask"){
         asks.push({
@@ -64,18 +64,91 @@ app.get("/order",(req,res)=>{
             price,
             quantity
         })
-        asks.sort((a,b)=> b.price - a.price)
+        asks.sort((a,b)=> a.price - b.price)
     }
-    return res.json({filledQuantity:remainingQty})
+    return res.json({filledQuantity:quantity - remainingQty})
 
 })
 
+app.get("/depth",(req,res)=>{
+    const depth : {
+        [price : string] :{
+            type : 'bid' | 'ask',
+            quantity : number 
+        }
+    } = {}
 
+    for(let i=0;i<bids.length;i++){
+        if(!depth[bids[i].price]){
+            depth[bids[i].price] = {
+                type:'bid',
+                quantity:bids[i].quantity
+            }
+        }else{
+            depth[bids[i].price].quantity += bids[i].quantity 
+        }
+    }
+    for(let i=0;i<asks.length;i++){
+        if(!depth[asks[i].price]){
+            depth[asks[i].price]={
+                type:'ask',
+                quantity:asks[i].quantity
+            }
+        }else{
+            depth[asks[i].price].quantity += asks[i].quantity
+        }
+    }
+    return res.json({depth})
 
+})
 
+function flipBalance(userId1:string,userId2:string,quantity:number,price:number){
+    let user1 = users.find(x => x.id === userId1)
+    let user2 = users.find(x => x.id === userId2)
+    if(!user1 || !user2){
+        return
+    } 
 
-function fillOrders(side:string,price:number,quantity:number,userId:string) : number {
-    return 2
+    user1.balances[TICKER] -= quantity
+    user2.balances[TICKER] += quantity
+    user1.balances["USD"] += quantity*price
+    user2.balances["USD"] -= quantity*price
+}
+
+function fillOrders(side:string,price:number,qty:number,userId:string) : number {
+    let  quantity = qty
+    if(side == "bid"){
+        for(let i=asks.length-1;i>=0;i--){
+            if(price<asks[i].price){
+                continue
+            }
+            if(quantity<asks[i].quantity){
+                asks[i].quantity -= quantity
+                flipBalance(asks[i].userId,userId,quantity,asks[i].price)
+                return 0
+            }else{
+                quantity -= asks[i].quantity
+                flipBalance(asks[i].userId,userId,asks[i].quantity,asks[i].price)
+                asks.splice(i,1)
+            }
+        }
+    }else{
+        for(let i=bids.length-1;i>=0;i--){
+            if(price > bids[i].price){
+                continue;
+            }
+            if(quantity<bids[i].quantity){
+                bids[i].quantity -= quantity
+                flipBalance(userId,bids[i].userId,quantity,price)
+                return 0
+            }else{
+                quantity -= bids[i].quantity
+                flipBalance(userId,bids[i].userId,bids[i].quantity,price)
+                bids.splice(i,1)
+            }
+        }
+    }
+    return quantity
 }
 app.listen(3000,()=>{
     console.log("Listening at port : 3000")
